@@ -1,0 +1,202 @@
+# OpenClaw SAP Configuration
+# Extends enterprise config with SAP-specific settings
+# Version: 1.0.0
+
+# ============================================================================
+# SAP DEVELOPMENT ENVIRONMENT
+# ============================================================================
+agents:
+  defaults:
+    workspace: ~/sap-workspace
+    
+    # SAP development context
+    bootstrapMaxChars: 50000  # More context for complex SAP projects
+    contextTokens: 250000
+    
+    # Extended execution for SAP deployments
+    cliBackends:
+      codex:
+        command: codex
+        args: ["--dangerously-auto-approve"]
+        
+  list:
+    - id: sap-developer
+      name: "SAP Development Assistant"
+      default: true
+      workspace: ~/sap-workspace
+      
+      identity:
+        name: "SAP Dev AI"
+        emoji: "💎"
+        
+      # SAP-specific skills
+      skills:
+        - github
+        - coding-agent
+        - supabase  # For hybrid scenarios
+
+# ============================================================================
+# SAP CLI TOOLS
+# ============================================================================
+tools:
+  exec:
+    host: gateway
+    security: allowlist
+    safeBins:
+      # Standard tools
+      - cat
+      - ls
+      - pwd
+      - grep
+      - find
+      - git
+      - npm
+      - node
+      - python3
+      
+      # SAP Cloud Foundry
+      - cf
+      
+      # SAP CAP Development
+      - cds        # CAP CLI
+      - npx
+      
+      # SAP BTP / Kubernetes
+      - kubectl
+      - helm
+      
+      # SAP HANA
+      - hdbsql
+      
+      # Docker for local development
+      - docker
+      - docker-compose
+      
+      # SAP GUI Scripting (Windows)
+      - powershell
+      
+      # SAP Build Tools
+      - mvn        # Maven for ABAP/Java
+      - gradle
+
+# ============================================================================
+# SAP MEMORY CONTEXT
+# ============================================================================
+memory:
+  backend: builtin
+  citations: "on"
+  
+# Agent memory for SAP knowledge retention
+agents:
+  defaults:
+    memorySearch:
+      enabled: true
+      provider: openai
+      sources:
+        - memory
+      extraPaths:
+        - ~/sap-workspace/docs
+        - ~/sap-workspace/knowledge
+      sync:
+        onSessionStart: true
+        watch: true
+      query:
+        maxResults: 10
+        minScore: 0.6
+
+# ============================================================================
+# SAP ENTERPRISE CHANNELS
+# ============================================================================
+channels:
+  # Microsoft Teams - Common in SAP environments
+  msteams:
+    enabled: false  # Enable when configured
+    dmPolicy: allowlist
+    groupPolicy: allowlist
+    
+  # Slack - For dev teams
+  slack:
+    enabled: false  # Enable when configured
+    dmPolicy: allowlist
+    groupPolicy: allowlist
+
+# ============================================================================
+# SAP SKILLS MANIFEST
+# ============================================================================
+skills:
+  load:
+    watch: true
+    extraDirs:
+      - ~/sap-workspace/skills
+      
+  entries:
+    github:
+      enabled: true
+    coding-agent:
+      enabled: true
+
+# ============================================================================
+# CRON JOBS FOR SAP WORKFLOWS
+# ============================================================================
+cron:
+  enabled: true
+  maxConcurrentRuns: 5
+
+# ============================================================================
+# SAP DEPLOYMENT HOOKS
+# ============================================================================
+hooks:
+  enabled: true
+  mappings:
+    - id: sap-deploy-webhook
+      match:
+        path: /sap/deploy
+      action: agent
+      messageTemplate: "SAP Deployment triggered: {{body.project}} to {{body.environment}}"
+      
+    - id: cap-build-webhook
+      match:
+        path: /cap/build
+      action: agent
+      messageTemplate: "CAP Build: {{body.status}} for {{body.service}}"
+
+# ============================================================================
+# SECURITY HARDENING
+# ============================================================================
+gateway:
+  auth:
+    mode: token
+    
+  tls:
+    enabled: true
+    autoGenerate: true
+
+logging:
+  level: info
+  consoleStyle: json
+  redactSensitive: tools
+  redactPatterns:
+    - "password"
+    - "token"
+    - "api[_-]?key"
+    - "secret"
+    - "credential"
+
+# ============================================================================
+# DISABLED FEATURES
+# ============================================================================
+plugins:
+  deny:
+    - voice-call
+    - telegram
+    - whatsapp
+    - signal
+    - imessage
+    - discord
+    - nostr
+    - twitch
+
+commands:
+  bash: false
+  config: false
+  restart: false

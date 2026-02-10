@@ -1,0 +1,289 @@
+# OpenClaw Enterprise Configuration
+# Optimized for SAP and enterprise environments
+# Version: 1.0.0
+
+# ============================================================================
+# GATEWAY SETTINGS
+# ============================================================================
+gateway:
+  port: 18789
+  mode: local
+  bind: loopback  # Security: localhost only by default
+  
+  auth:
+    mode: token
+    # token: <set via environment or CLI>
+    
+  tls:
+    enabled: true
+    autoGenerate: true
+    
+  controlUi:
+    enabled: true
+    allowInsecureAuth: false
+    dangerouslyDisableDeviceAuth: false
+
+# ============================================================================
+# LOGGING & DIAGNOSTICS
+# ============================================================================
+logging:
+  level: info
+  consoleLevel: warn
+  consoleStyle: json  # JSON logs for enterprise log aggregation
+  redactSensitive: tools
+
+diagnostics:
+  enabled: true
+  otel:
+    enabled: false  # Enable for enterprise observability
+    # endpoint: <your OTEL endpoint>
+    # protocol: http/protobuf
+    serviceName: openclaw-enterprise
+    traces: true
+    metrics: true
+    logs: true
+
+# ============================================================================
+# AGENT CONFIGURATION
+# ============================================================================
+agents:
+  defaults:
+    workspace: ~/workspace
+    userTimezone: auto
+    timeFormat: "24"
+    
+    # Context management
+    contextTokens: 200000
+    bootstrapMaxChars: 30000
+    
+    # Reasoning defaults
+    thinkingDefault: "low"
+    verboseDefault: "off"
+    
+    # Memory search for knowledge retention
+    memorySearch:
+      enabled: true
+      provider: openai
+      sources:
+        - memory
+      sync:
+        onSessionStart: true
+        watch: true
+        
+    # Compaction settings
+    compaction:
+      mode: safeguard
+      memoryFlush:
+        enabled: true
+        
+    # Subagent settings
+    subagents:
+      maxConcurrent: 3
+      archiveAfterMinutes: 60
+
+  list:
+    - id: enterprise
+      name: "Enterprise Assistant"
+      default: true
+      workspace: ~/workspace
+      
+      identity:
+        name: "Enterprise AI"
+        emoji: "🏢"
+        
+      tools:
+        profile: full
+        deny:
+          - voice_call  # No phone calls in enterprise
+          
+      # Enterprise group chat behavior
+      groupChat:
+        historyLimit: 50
+
+# ============================================================================
+# TOOL CONFIGURATION
+# ============================================================================
+tools:
+  profile: full
+  
+  # Disable consumer messaging features
+  deny:
+    - voice_call
+    
+  # Web tools
+  web:
+    search:
+      enabled: true
+      provider: brave
+      maxResults: 10
+      timeoutSeconds: 30
+      
+    fetch:
+      enabled: true
+      maxChars: 100000
+      timeoutSeconds: 60
+      
+  # Execution security
+  exec:
+    host: gateway
+    security: allowlist
+    ask: "on-miss"
+    timeoutSec: 300
+    safeBins:
+      - cat
+      - ls
+      - pwd
+      - grep
+      - find
+      - head
+      - tail
+      - wc
+      - sort
+      - uniq
+      - git
+      - npm
+      - node
+      - python3
+      - cf  # Cloud Foundry CLI
+      - kubectl
+      - docker
+      
+  # Cross-context messaging (enterprise channels only)
+  message:
+    crossContext:
+      allowWithinProvider: true
+      allowAcrossProviders: false
+      marker:
+        enabled: true
+
+# ============================================================================
+# ENTERPRISE CHANNELS (Enable as needed)
+# ============================================================================
+channels:
+  # Slack - Primary enterprise channel
+  slack:
+    enabled: false  # Set to true when configured
+    # botToken: xoxb-...
+    # appToken: xapp-...
+    dmPolicy: allowlist
+    groupPolicy: allowlist
+    configWrites: false  # No runtime config changes in enterprise
+    
+  # Microsoft Teams
+  msteams:
+    enabled: false  # Set to true when configured
+    dmPolicy: allowlist
+    groupPolicy: allowlist
+
+# ============================================================================
+# DISABLED CONSUMER CHANNELS
+# ============================================================================
+  telegram:
+    enabled: false
+    
+  whatsapp:
+    enabled: false
+    
+  signal:
+    enabled: false
+    
+  imessage:
+    enabled: false
+    
+  discord:
+    enabled: false
+
+# ============================================================================
+# PLUGINS
+# ============================================================================
+plugins:
+  enabled: true
+  
+  # Disable consumer plugins
+  deny:
+    - voice-call
+    - telegram
+    - whatsapp
+    - signal
+    - imessage
+    - discord
+    - nostr
+    - twitch
+    
+  entries:
+    # Enable enterprise plugins
+    slack:
+      enabled: true
+    msteams:
+      enabled: true
+    googlechat:
+      enabled: true
+    memory-core:
+      enabled: true
+
+# ============================================================================
+# SESSION MANAGEMENT
+# ============================================================================
+session:
+  scope: per-sender
+  dmScope: per-channel-peer
+  
+  reset:
+    mode: daily
+    atHour: 3  # Reset at 3 AM
+    
+  # Enterprise typing indicators
+  typingMode: thinking
+
+# ============================================================================
+# CRON (Scheduled Jobs)
+# ============================================================================
+cron:
+  enabled: true
+  maxConcurrentRuns: 3
+
+# ============================================================================
+# HOOKS (Webhooks)
+# ============================================================================
+hooks:
+  enabled: true
+  maxBodyBytes: 1048576  # 1MB
+  
+# ============================================================================
+# MEMORY BACKEND
+# ============================================================================
+memory:
+  backend: builtin
+  citations: auto
+
+# ============================================================================
+# BROWSER AUTOMATION
+# ============================================================================
+browser:
+  enabled: true
+  headless: true
+  evaluateEnabled: true
+  
+# ============================================================================
+# SKILLS
+# ============================================================================
+skills:
+  load:
+    watch: true
+    
+  # Enterprise skill allowlist (customize as needed)
+  allowBundled:
+    - github
+    - coding-agent
+    - 1password
+
+# ============================================================================
+# COMMANDS
+# ============================================================================
+commands:
+  native: auto
+  nativeSkills: auto
+  text: true
+  bash: false  # Disable direct bash in enterprise
+  config: false  # No config changes via chat
+  restart: false
