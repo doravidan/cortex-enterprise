@@ -1,5 +1,5 @@
-# OpenClaw Enterprise Configuration
-# Optimized for SAP and enterprise environments
+# Cortex Enterprise Configuration
+# AI-powered development assistant for enterprise environments
 # Version: 1.0.0
 
 # ============================================================================
@@ -12,7 +12,6 @@ gateway:
   
   auth:
     mode: token
-    # token: <set via environment or CLI>
     
   tls:
     enabled: true
@@ -21,7 +20,6 @@ gateway:
   controlUi:
     enabled: true
     allowInsecureAuth: false
-    dangerouslyDisableDeviceAuth: false
 
 # ============================================================================
 # LOGGING & DIAGNOSTICS
@@ -36,9 +34,7 @@ diagnostics:
   enabled: true
   otel:
     enabled: false  # Enable for enterprise observability
-    # endpoint: <your OTEL endpoint>
-    # protocol: http/protobuf
-    serviceName: openclaw-enterprise
+    serviceName: cortex-enterprise
     traces: true
     metrics: true
     logs: true
@@ -51,16 +47,11 @@ agents:
     workspace: ~/workspace
     userTimezone: auto
     timeFormat: "24"
-    
-    # Context management
     contextTokens: 200000
     bootstrapMaxChars: 30000
-    
-    # Reasoning defaults
     thinkingDefault: "low"
     verboseDefault: "off"
     
-    # Memory search for knowledge retention
     memorySearch:
       enabled: true
       provider: openai
@@ -70,13 +61,11 @@ agents:
         onSessionStart: true
         watch: true
         
-    # Compaction settings
     compaction:
       mode: safeguard
       memoryFlush:
         enabled: true
         
-    # Subagent settings
     subagents:
       maxConcurrent: 3
       archiveAfterMinutes: 60
@@ -88,15 +77,14 @@ agents:
       workspace: ~/workspace
       
       identity:
-        name: "Enterprise AI"
-        emoji: "🏢"
+        name: "Cortex"
+        emoji: "🧠"
         
       tools:
         profile: full
         deny:
-          - voice_call  # No phone calls in enterprise
+          - voice_call
           
-      # Enterprise group chat behavior
       groupChat:
         historyLimit: 50
 
@@ -105,12 +93,9 @@ agents:
 # ============================================================================
 tools:
   profile: full
-  
-  # Disable consumer messaging features
   deny:
     - voice_call
     
-  # Web tools
   web:
     search:
       enabled: true
@@ -123,7 +108,6 @@ tools:
       maxChars: 100000
       timeoutSeconds: 60
       
-  # Execution security
   exec:
     host: gateway
     security: allowlist
@@ -144,11 +128,10 @@ tools:
       - npm
       - node
       - python3
-      - cf  # Cloud Foundry CLI
+      - cf
       - kubectl
       - docker
       
-  # Cross-context messaging (enterprise channels only)
   message:
     crossContext:
       allowWithinProvider: true
@@ -157,21 +140,17 @@ tools:
         enabled: true
 
 # ============================================================================
-# ENTERPRISE CHANNELS (Enable as needed)
+# ENTERPRISE CHANNELS
 # ============================================================================
 channels:
-  # Slack - Primary enterprise channel
   slack:
-    enabled: false  # Set to true when configured
-    # botToken: xoxb-...
-    # appToken: xapp-...
+    enabled: false
     dmPolicy: allowlist
     groupPolicy: allowlist
-    configWrites: false  # No runtime config changes in enterprise
+    configWrites: false
     
-  # Microsoft Teams
   msteams:
-    enabled: false  # Set to true when configured
+    enabled: false
     dmPolicy: allowlist
     groupPolicy: allowlist
 
@@ -180,16 +159,12 @@ channels:
 # ============================================================================
   telegram:
     enabled: false
-    
   whatsapp:
     enabled: false
-    
   signal:
     enabled: false
-    
   imessage:
     enabled: false
-    
   discord:
     enabled: false
 
@@ -198,8 +173,6 @@ channels:
 # ============================================================================
 plugins:
   enabled: true
-  
-  # Disable consumer plugins
   deny:
     - voice-call
     - telegram
@@ -211,7 +184,6 @@ plugins:
     - twitch
     
   entries:
-    # Enable enterprise plugins
     slack:
       enabled: true
     msteams:
@@ -227,30 +199,27 @@ plugins:
 session:
   scope: per-sender
   dmScope: per-channel-peer
-  
   reset:
     mode: daily
-    atHour: 3  # Reset at 3 AM
-    
-  # Enterprise typing indicators
+    atHour: 3
   typingMode: thinking
 
 # ============================================================================
-# CRON (Scheduled Jobs)
+# SCHEDULED JOBS
 # ============================================================================
 cron:
   enabled: true
   maxConcurrentRuns: 3
 
 # ============================================================================
-# HOOKS (Webhooks)
+# WEBHOOKS
 # ============================================================================
 hooks:
   enabled: true
-  maxBodyBytes: 1048576  # 1MB
-  
+  maxBodyBytes: 1048576
+
 # ============================================================================
-# MEMORY BACKEND
+# MEMORY
 # ============================================================================
 memory:
   backend: builtin
@@ -263,15 +232,13 @@ browser:
   enabled: true
   headless: true
   evaluateEnabled: true
-  
+
 # ============================================================================
 # SKILLS
 # ============================================================================
 skills:
   load:
     watch: true
-    
-  # Enterprise skill allowlist (customize as needed)
   allowBundled:
     - github
     - coding-agent
@@ -284,6 +251,6 @@ commands:
   native: auto
   nativeSkills: auto
   text: true
-  bash: false  # Disable direct bash in enterprise
-  config: false  # No config changes via chat
+  bash: false
+  config: false
   restart: false

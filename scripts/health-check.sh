@@ -1,10 +1,9 @@
 #!/bin/bash
-# OpenClaw Enterprise Health Check
+# Cortex Enterprise Health Check
 # Usage: ./health-check.sh [--json]
 
-GATEWAY_URL="${OPENCLAW_GATEWAY_URL:-http://localhost:18789}"
+GATEWAY_URL="${CORTEX_GATEWAY_URL:-http://localhost:18789}"
 
-# Output format
 JSON_OUTPUT=false
 if [ "$1" == "--json" ]; then
     JSON_OUTPUT=true
@@ -19,18 +18,8 @@ check_gateway() {
     fi
 }
 
-check_api_keys() {
-    if [ -n "$ANTHROPIC_API_KEY" ]; then
-        return 0
-    elif openclaw auth status 2>/dev/null | grep -q "anthropic.*active"; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 check_config() {
-    if openclaw config validate &> /dev/null; then
+    if [ -f "${HOME}/.cortex/config.yaml" ]; then
         return 0
     else
         return 1
@@ -38,13 +27,11 @@ check_config() {
 }
 
 if [ "$JSON_OUTPUT" = true ]; then
-    # JSON output for monitoring systems
     gateway_ok=$(check_gateway && echo "true" || echo "false")
-    api_ok=$(check_api_keys && echo "true" || echo "false")
     config_ok=$(check_config && echo "true" || echo "false")
     
     overall="healthy"
-    if [ "$gateway_ok" = "false" ] || [ "$api_ok" = "false" ] || [ "$config_ok" = "false" ]; then
+    if [ "$gateway_ok" = "false" ] || [ "$config_ok" = "false" ]; then
         overall="unhealthy"
     fi
     
@@ -54,15 +41,13 @@ if [ "$JSON_OUTPUT" = true ]; then
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "checks": {
     "gateway": $gateway_ok,
-    "api_keys": $api_ok,
     "config": $config_ok
   }
 }
 EOF
 else
-    # Human-readable output
-    echo "OpenClaw Enterprise Health Check"
-    echo "================================"
+    echo "Cortex Enterprise Health Check"
+    echo "==============================="
     echo
     
     printf "Gateway:    "
@@ -72,18 +57,11 @@ else
         echo "✗ Not responding"
     fi
     
-    printf "API Keys:   "
-    if check_api_keys; then
-        echo "✓ Configured"
-    else
-        echo "✗ Not configured"
-    fi
-    
     printf "Config:     "
     if check_config; then
-        echo "✓ Valid"
+        echo "✓ Present"
     else
-        echo "✗ Invalid"
+        echo "✗ Not found"
     fi
     
     echo

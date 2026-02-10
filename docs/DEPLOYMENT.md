@@ -4,90 +4,71 @@
 
 ### 1. Local Workstation
 
-Best for: Individual developers, testing
-
 ```bash
-# Install globally
-npm install -g openclaw
+# Run setup
+./scripts/setup.sh
 
-# Configure
-openclaw wizard
-
-# Apply enterprise config
-cp configs/enterprise-config.yaml ~/.openclaw/config.yaml
-
-# Start
-openclaw gateway start
+# For SAP environment
+./scripts/setup.sh --sap
 ```
 
 ### 2. Docker Container
 
-Best for: Team deployments, CI/CD
-
 ```dockerfile
 FROM node:22-slim
 
-# Install OpenClaw
-RUN npm install -g openclaw
+WORKDIR /app
+COPY . .
 
-# Copy config
-COPY configs/enterprise-config.yaml /root/.openclaw/config.yaml
+RUN chmod +x scripts/*.sh
 
-# Set environment
-ENV NODE_ENV=production
-
-# Expose gateway port
 EXPOSE 18789
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s \
-  CMD curl -f http://localhost:18789/health || exit 1
+  CMD ./scripts/health-check.sh || exit 1
 
-CMD ["openclaw", "gateway", "start"]
+CMD ["./scripts/start.sh"]
 ```
 
 ```bash
 # Build
-docker build -t openclaw-enterprise .
+docker build -t cortex-enterprise .
 
 # Run
 docker run -d \
   -p 18789:18789 \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -v ~/workspace:/root/workspace \
-  openclaw-enterprise
+  cortex-enterprise
 ```
 
 ### 3. Kubernetes / BTP Kyma
 
-Best for: Enterprise scale, SAP BTP
-
 ```yaml
-# k8s/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: openclaw-enterprise
+  name: cortex-enterprise
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: openclaw
+      app: cortex
   template:
     metadata:
       labels:
-        app: openclaw
+        app: cortex
     spec:
       containers:
-      - name: openclaw
-        image: your-registry/openclaw-enterprise:latest
+      - name: cortex
+        image: your-registry/cortex-enterprise:latest
         ports:
         - containerPort: 18789
         env:
         - name: ANTHROPIC_API_KEY
           valueFrom:
             secretKeyRef:
-              name: openclaw-secrets
+              name: cortex-secrets
               key: anthropic-key
         resources:
           requests:
@@ -102,17 +83,6 @@ spec:
             port: 18789
           initialDelaySeconds: 30
           periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: openclaw-service
-spec:
-  selector:
-    app: openclaw
-  ports:
-  - port: 18789
-    targetPort: 18789
 ```
 
 ### 4. Cloud Foundry (SAP BTP)
@@ -120,20 +90,15 @@ spec:
 ```yaml
 # manifest.yaml
 applications:
-- name: openclaw-enterprise
+- name: cortex-enterprise
   memory: 1G
   instances: 1
   buildpacks:
     - nodejs_buildpack
-  command: openclaw gateway start
   env:
     NODE_ENV: production
   services:
-    - xsuaa-instance  # For authentication
-```
-
-```bash
-cf push -f manifest.yaml
+    - xsuaa-instance
 ```
 
 ## Environment Configuration
@@ -141,111 +106,29 @@ cf push -f manifest.yaml
 ### Required Secrets
 
 ```bash
-# Create Kubernetes secret
-kubectl create secret generic openclaw-secrets \
-  --from-literal=anthropic-key=sk-ant-... \
-  --from-literal=openai-key=sk-...
+kubectl create secret generic cortex-secrets \
+  --from-literal=anthropic-key=sk-ant-...
 ```
 
-### Optional Integrations
+## Monitoring
+
+### Health Check
 
 ```bash
-# Slack
---from-literal=slack-bot-token=xoxb-... \
---from-literal=slack-app-token=xapp-...
+./scripts/health-check.sh
 
-# SAP tools
---from-literal=cf-password=... \
-```
-
-## Scaling Considerations
-
-### Single Instance (Default)
-- Stateful session storage
-- Memory-based caching
-- Suitable for most use cases
-
-### Multi-Instance (Advanced)
-- Requires shared session store
-- Use Redis or PostgreSQL backend
-- Configure load balancer with sticky sessions
-
-```yaml
-session:
-  store: redis://redis-host:6379
-```
-
-## Monitoring & Alerts
-
-### Prometheus Metrics
-
-```yaml
-diagnostics:
-  otel:
-    enabled: true
-    endpoint: http://prometheus-pushgateway:9091
-    metrics: true
-```
-
-### Log Aggregation
-
-```yaml
-logging:
-  level: info
-  consoleStyle: json
-```
-
-Parse JSON logs with Fluentd, Logstash, or similar.
-
-## Backup & Recovery
-
-### Session Data
-```bash
-# Backup sessions
-cp -r ~/.openclaw/sessions ~/backup/
-
-# Restore
-cp -r ~/backup/sessions ~/.openclaw/
-```
-
-### Memory Index
-```bash
-# Backup memory
-cp -r ~/.openclaw/memory ~/backup/
-
-# Reindex after restore
-openclaw memory rebuild
+# JSON output
+./scripts/health-check.sh --json
 ```
 
 ## Troubleshooting
 
 ### Gateway won't start
-```bash
-# Check logs
-openclaw gateway logs
-
-# Verify config
-openclaw config validate
-
-# Reset to defaults
-openclaw wizard --force
-```
+- Check configuration file exists
+- Verify API keys are set
+- Check port availability
 
 ### Channel connection issues
-```bash
-# Test Slack connection
-curl -X POST https://slack.com/api/auth.test \
-  -H "Authorization: Bearer $SLACK_BOT_TOKEN"
-
-# Check bot permissions
-openclaw status --channels
-```
-
-### Memory issues
-```bash
-# Check memory usage
-openclaw status --memory
-
-# Compact sessions
-openclaw sessions prune --older-than 7d
-```
+- Verify bot tokens
+- Check network connectivity
+- Review permissions

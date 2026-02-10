@@ -1,5 +1,5 @@
-# OpenClaw SAP Configuration
-# Extends enterprise config with SAP-specific settings
+# Cortex SAP Configuration
+# AI assistant optimized for SAP development workflows
 # Version: 1.0.0
 
 # ============================================================================
@@ -8,12 +8,9 @@
 agents:
   defaults:
     workspace: ~/sap-workspace
-    
-    # SAP development context
-    bootstrapMaxChars: 50000  # More context for complex SAP projects
+    bootstrapMaxChars: 50000
     contextTokens: 250000
     
-    # Extended execution for SAP deployments
     cliBackends:
       codex:
         command: codex
@@ -26,14 +23,13 @@ agents:
       workspace: ~/sap-workspace
       
       identity:
-        name: "SAP Dev AI"
+        name: "Cortex SAP"
         emoji: "💎"
         
-      # SAP-specific skills
       skills:
         - github
         - coding-agent
-        - supabase  # For hybrid scenarios
+        - supabase
 
 # ============================================================================
 # SAP CLI TOOLS
@@ -58,7 +54,7 @@ tools:
       - cf
       
       # SAP CAP Development
-      - cds        # CAP CLI
+      - cds
       - npx
       
       # SAP BTP / Kubernetes
@@ -68,15 +64,12 @@ tools:
       # SAP HANA
       - hdbsql
       
-      # Docker for local development
+      # Docker
       - docker
       - docker-compose
       
-      # SAP GUI Scripting (Windows)
-      - powershell
-      
-      # SAP Build Tools
-      - mvn        # Maven for ABAP/Java
+      # Build Tools
+      - mvn
       - gradle
 
 # ============================================================================
@@ -85,8 +78,7 @@ tools:
 memory:
   backend: builtin
   citations: "on"
-  
-# Agent memory for SAP knowledge retention
+
 agents:
   defaults:
     memorySearch:
@@ -105,23 +97,21 @@ agents:
         minScore: 0.6
 
 # ============================================================================
-# SAP ENTERPRISE CHANNELS
+# ENTERPRISE CHANNELS
 # ============================================================================
 channels:
-  # Microsoft Teams - Common in SAP environments
   msteams:
-    enabled: false  # Enable when configured
+    enabled: false
     dmPolicy: allowlist
     groupPolicy: allowlist
     
-  # Slack - For dev teams
   slack:
-    enabled: false  # Enable when configured
+    enabled: false
     dmPolicy: allowlist
     groupPolicy: allowlist
 
 # ============================================================================
-# SAP SKILLS MANIFEST
+# SKILLS
 # ============================================================================
 skills:
   load:
@@ -136,14 +126,14 @@ skills:
       enabled: true
 
 # ============================================================================
-# CRON JOBS FOR SAP WORKFLOWS
+# SCHEDULED JOBS
 # ============================================================================
 cron:
   enabled: true
   maxConcurrentRuns: 5
 
 # ============================================================================
-# SAP DEPLOYMENT HOOKS
+# SAP DEPLOYMENT WEBHOOKS
 # ============================================================================
 hooks:
   enabled: true
@@ -161,7 +151,7 @@ hooks:
       messageTemplate: "CAP Build: {{body.status}} for {{body.service}}"
 
 # ============================================================================
-# SECURITY HARDENING
+# SECURITY
 # ============================================================================
 gateway:
   auth:
