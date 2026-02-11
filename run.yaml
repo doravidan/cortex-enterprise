@@ -1,0 +1,34 @@
+version: 1
+
+repo:
+  path: /Users/I347316/dev/cortex-enterprise
+
+cxdb:
+  binary_addr: 127.0.0.1:9009
+  http_base_url: http://127.0.0.1:9010
+  autostart:
+    enabled: false
+
+llm:
+  cli_profile: real
+  providers:
+    anthropic:
+      backend: cli
+
+modeldb:
+  openrouter_model_info_path: /tmp/kilroy/internal/attractor/modeldb/pinned/openrouter_models.json
+
+git:
+  require_clean: false
+  run_branch_prefix: attractor/run
+  commit_per_node: true
+
+runtime_policy:
+  stage_timeout_ms: 600000      # 10 min per stage
+  stall_timeout_ms: 300000      # 5 min stall detection
+  stall_check_interval_ms: 5000
+  max_llm_retries: 3
+
+preflight:
+  prompt_probes:
+    enabled: false

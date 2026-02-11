@@ -1,0 +1,129 @@
+digraph cortex_enterprise {
+    graph [
+        goal="Complete Cortex Enterprise: production-ready AI relay connecting Slack/Teams/Webhooks to Claude Code with team-based routing, persistent memory (Supabase), and proactive features. Make all TypeScript compile, add tests, fix any bugs, and prepare for deployment.",
+        rankdir=LR,
+        default_max_retry=2,
+        model_stylesheet="
+            * { llm_provider: anthropic; llm_model: claude-sonnet-4-20250514; }
+            .architect { llm_provider: anthropic; llm_model: claude-sonnet-4-20250514; reasoning_effort: high; }
+            .review { llm_provider: anthropic; llm_model: claude-sonnet-4-20250514; reasoning_effort: high; }
+            .quick { llm_provider: anthropic; llm_model: claude-sonnet-4-20250514; }
+        "
+    ]
+
+    start [shape=Mdiamond, label="Start"]
+    exit  [shape=Msquare, label="Exit"]
+
+    // =========================================================================
+    // Phase 1: Audit — understand current state
+    // =========================================================================
+
+    audit_codebase [
+        shape=box,
+        class="architect",
+        auto_status=true,
+        max_agent_turns=30,
+        prompt="Audit the cortex-enterprise codebase thoroughly.\n\nRead every file in src/, setup/, examples/, db/, configs/, skills/, docs/.\n\nProduce .ai/audit.md covering:\n1. Current state: what works, what's scaffolding, what's missing\n2. TypeScript compilation status (run: npx tsc --noEmit)\n3. Missing type definitions or broken imports\n4. Environment dependencies and their status\n5. Security concerns (hardcoded secrets, missing validation)\n6. Missing error handling patterns\n7. Things that need fixing vs. things that are production-ready\n\nBe brutally honest — flag anything that won't compile or run.\n\nWrite status.json: outcome=success"
+    ]
+
+    // =========================================================================
+    // Phase 2: Fix core — make it compile and run
+    // =========================================================================
+
+    fix_typescript [
+        shape=box,
+        auto_status=true,
+        max_agent_turns=40,
+        prompt="Goal: $goal\n\nRead .ai/audit.md. Fix all TypeScript compilation errors.\n\n1. Run npx tsc --noEmit and fix every error\n2. Add missing type definitions\n3. Fix broken imports\n4. Ensure all src/*.ts and src/channels/*.ts compile cleanly\n5. Do NOT change functionality — only fix types and compilation\n\nRun npx tsc --noEmit again at the end to confirm zero errors.\n\nWrite status.json: outcome=success if zero TS errors, outcome=fail otherwise"
+    ]
+
+    fix_relay [
+        shape=box,
+        auto_status=true,
+        max_agent_turns=40,
+        prompt="Goal: $goal\n\nFix src/relay.ts — the core module:\n\n1. Claude CLI spawning: ensure proper argument handling, error recovery, timeout\n2. Session management: fix session persistence and resume logic\n3. Lock file handling: make it robust (stale lock detection, cleanup)\n4. Message handler: validate inputs, handle edge cases (empty messages, very long messages)\n5. Response splitting: test with messages > 4000 chars\n6. Ensure proper async/await patterns (no unhandled promises)\n7. Add graceful shutdown (cleanup on SIGINT/SIGTERM)\n\nTest by running: npx tsx src/relay.ts (should start without errors)\nCtrl+C and verify clean shutdown.\n\nWrite status.json: outcome=success"
+    ]
+
+    fix_router [
+        shape=box,
+        auto_status=true,
+        max_agent_turns=25,
+        prompt="Goal: $goal\n\nFix src/router.ts:\n\n1. Verify all team definitions are complete and consistent\n2. Ensure team routing logic handles edge cases (unknown team, empty input)\n3. Add /team command parsing if not present\n4. Validate team system prompts reference correct skills\n5. Type-check all exports\n\nWrite status.json: outcome=success"
+    ]
+
+    fix_memory [
+        shape=box,
+        auto_status=true,
+        max_agent_turns=30,
+        prompt="Goal: $goal\n\nFix src/memory.ts:\n\n1. Supabase client creation (handle missing env vars gracefully — memory is optional)\n2. Memory intent processing ([REMEMBER:], [GOAL:], [DONE:] tags)\n3. Semantic search / context retrieval\n4. Verify db/schema.sql matches the code's expectations\n5. Handle Supabase errors gracefully (don't crash relay if DB is down)\n6. Test with and without SUPABASE_URL set\n\nWrite status.json: outcome=success"
+    ]
+
+    fix_channels [
+        shape=box,
+        auto_status=true,
+        max_agent_turns=35,
+        prompt="Goal: $goal\n\nFix all channel adapters:\n\n1. src/channels/slack.ts — Slack Bolt integration, socket mode, message handling\n2. src/channels/teams.ts — Bot Framework adapter, proper port binding\n3. src/channels/webhook.ts — Express server, all route handlers, input validation\n4. Each channel should handle: missing config (skip gracefully), errors (log + respond), long messages (split)\n5. Webhook: validate /health, /message, and all /hooks/* endpoints\n6. Ensure channels don't crash the main process if they fail to start\n\nWrite status.json: outcome=success"
+    ]
+
+    // =========================================================================
+    // Phase 3: Setup & tooling
+    // =========================================================================
+
+    fix_setup [
+        shape=box,
+        auto_status=true,
+        class="quick",
+        max_agent_turns=25,
+        prompt="Goal: $goal\n\nFix setup and verification scripts:\n\n1. setup/install.ts — dependency installation, .env creation, directory setup\n2. setup/verify.ts — health checks (Node version, Claude CLI, TypeScript, Supabase)\n3. scripts/setup.sh and scripts/setup.ps1 — OS-level setup\n4. scripts/health-check.sh and scripts/health-check.ps1 — OS-level health checks\n5. Verify .env.example has all needed variables documented\n6. Ensure npm scripts work: npm run setup, npm run setup:verify\n\nWrite status.json: outcome=success"
+    ]
+
+    fix_examples [
+        shape=box,
+        auto_status=true,
+        class="quick",
+        max_agent_turns=20,
+        prompt="Goal: $goal\n\nFix proactive features:\n\n1. examples/smart-checkin.ts — make it compile and handle missing env vars\n2. examples/morning-briefing.ts — make it compile and handle missing env vars\n3. Both should exit cleanly when channel webhooks aren't configured\n4. Both should use the same callClaude pattern from relay.ts (import or duplicate)\n\nWrite status.json: outcome=success"
+    ]
+
+    // =========================================================================
+    // Phase 4: Tests
+    // =========================================================================
+
+    add_tests [
+        shape=box,
+        auto_status=true,
+        max_agent_turns=40,
+        prompt="Goal: $goal\n\nAdd comprehensive tests. Create tests/ directory with:\n\n1. tests/router.test.ts — team routing, unknown teams, command parsing\n2. tests/memory.test.ts — intent extraction, tag stripping, graceful degradation\n3. tests/webhook.test.ts — all endpoints, input validation, error responses\n4. tests/relay.test.ts — response splitting, prompt building, session management\n\nUse Node's built-in test runner (node:test + node:assert).\nAdd test script to package.json: \"test\": \"tsx --test tests/*.test.ts\"\nRun all tests and ensure they pass.\n\nWrite status.json: outcome=success if all tests pass"
+    ]
+
+    // =========================================================================
+    // Phase 5: Final review
+    // =========================================================================
+
+    integration_check [
+        shape=box,
+        auto_status=true,
+        class="review",
+        max_agent_turns=30,
+        prompt="Goal: $goal\n\nFinal integration check:\n\n1. npx tsc --noEmit — must be zero errors\n2. npm test — all tests pass\n3. npx tsx src/relay.ts — starts without errors (test with curl to /health)\n4. Review all changes for consistency\n5. Update README.md if anything changed\n6. Update CLAUDE.md if setup steps changed\n7. Verify package.json scripts are all correct\n\nCreate .ai/final-report.md with:\n- What was fixed\n- What was added\n- What still needs manual setup (API keys, Supabase, etc.)\n- Deployment readiness assessment\n\nWrite status.json: outcome=success"
+    ]
+
+    // =========================================================================
+    // Edges
+    // =========================================================================
+
+    start -> audit_codebase
+    audit_codebase -> fix_typescript
+    fix_typescript -> fix_relay
+    fix_typescript -> fix_router
+    fix_typescript -> fix_memory
+    fix_relay -> fix_channels
+    fix_router -> fix_channels
+    fix_memory -> fix_channels
+    fix_channels -> fix_setup
+    fix_channels -> fix_examples
+    fix_setup -> add_tests
+    fix_examples -> add_tests
+    add_tests -> integration_check
+    integration_check -> exit
+}
