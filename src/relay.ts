@@ -12,7 +12,7 @@
  * Dev:  npm run dev         (with --watch)
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { exec } from "node:child_process";
 import { writeFile, mkdir, readFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -40,7 +40,7 @@ const PROJECT_ROOT = dirname(__dirname);
 const CLAUDE_PATH = process.env.CLAUDE_PATH || "claude";
 const PROJECT_DIR = process.env.PROJECT_DIR || join(process.env.HOME || process.env.USERPROFILE || "~", "workspace");
 const RELAY_DIR = process.env.RELAY_DIR || join(process.env.HOME || process.env.USERPROFILE || "~", ".cortex-relay");
-const PORT = parseInt(process.env.PORT || "18789", 10);
+const PORT = parseInt(process.env.PORT || "3120", 10);  // Default 3120 (18789 is used by Claude Code gateway)
 const DEFAULT_AGENT = (process.env.DEFAULT_AGENT || "orchestrator") as TeamId;
 
 // Directories
@@ -162,48 +162,49 @@ export async function callClaude(
     files?: string[];
   }
 ): Promise<string> {
-  const args = [CLAUDE_PATH, "-p", prompt];
+  // Write prompt to a temp file, then pipe it to Claude CLI.
+  // This avoids all shell escaping issues on Windows — the prompt
+  // can contain newlines, quotes, and special characters safely.
+  const promptFile = join(TEMP_DIR, `prompt-${Date.now()}.txt`);
+  await writeFile(promptFile, prompt, "utf-8");
 
-  // Resume previous session if available
+  // Build CLI flags.  Use CLAUDE_MODEL env var to override (default: sonnet for speed).
+  const model = process.env.CLAUDE_MODEL || "sonnet";
+  const flags = ["--print", "--output-format", "text", "--model", model];
+
   if (options?.resume && session.sessionId) {
-    args.push("--resume", session.sessionId);
+    flags.push("--resume", session.sessionId);
   }
 
-  // Use Opus 4.6
-  args.push("--model", "claude-opus-4-6-20250219");
-  args.push("--output-format", "text");
+  // Build the shell command: pipe temp file to claude via stdin
+  const isWindows = process.platform === "win32";
+  const readCmd = isWindows
+    ? `type "${promptFile}"`
+    : `cat "${promptFile}"`;
+  const claudeCmd = `${readCmd} | ${CLAUDE_PATH} ${flags.join(" ")}`;
 
   console.log(`[CLAUDE] Calling (team: ${options?.teamId || "orchestrator"}): ${prompt.substring(0, 80)}...`);
 
   return new Promise((resolve) => {
-    const proc: ChildProcess = spawn(args[0], args.slice(1), {
+    exec(claudeCmd, {
       cwd: PROJECT_DIR,
-      env: {
-        ...process.env,
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+      env: { ...process.env },
+      maxBuffer: 10 * 1024 * 1024, // 10 MB
+      timeout: 300_000,             // 5 min timeout
+    }, async (error, stdout, stderr) => {
+      // Clean up temp file
+      await unlink(promptFile).catch(() => {});
 
-    let stdout = "";
-    let stderr = "";
-
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-
-    proc.on("close", async (code) => {
-      if (code !== 0) {
-        console.error("[CLAUDE] Error:", stderr);
-        resolve(`Error: ${stderr || "Claude exited with code " + code}`);
+      if (error) {
+        console.error("[CLAUDE] Error:", (stderr || error.message).substring(0, 500));
+        resolve(`Error: ${stderr || error.message}`);
         return;
       }
 
+      const output = stdout.trim();
+
       // Extract session ID for --resume
-      const sessionMatch = stdout.match(/Session ID: ([a-f0-9-]+)/i);
+      const sessionMatch = output.match(/Session ID: ([a-f0-9-]+)/i);
       if (sessionMatch) {
         session.sessionId = sessionMatch[1];
         session.lastActivity = new Date().toISOString();
@@ -211,12 +212,7 @@ export async function callClaude(
         await saveSession(session);
       }
 
-      resolve(stdout.trim());
-    });
-
-    proc.on("error", (error) => {
-      console.error("[CLAUDE] Spawn error:", error);
-      resolve("Error: Could not run Claude CLI. Is it installed?");
+      resolve(output);
     });
   });
 }
