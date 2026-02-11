@@ -1,0 +1,32 @@
+{
+  "name": "cortex-enterprise",
+  "version": "2.0.0",
+  "description": "AI-powered enterprise assistant — Claude Code relay with team agents",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "tsx src/relay.ts",
+    "dev": "tsx --watch src/relay.ts",
+    "setup": "tsx setup/install.ts",
+    "setup:verify": "tsx setup/verify.ts",
+    "test:slack": "tsx setup/test-slack.ts",
+    "test:teams": "tsx setup/test-teams.ts",
+    "test:webhook": "tsx setup/test-webhook.ts",
+    "checkin": "tsx examples/smart-checkin.ts",
+    "briefing": "tsx examples/morning-briefing.ts"
+  },
+  "dependencies": {
+    "@slack/bolt": "^4.1.0",
+    "botbuilder": "^4.23.0",
+    "botframework-connector": "^4.23.0",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

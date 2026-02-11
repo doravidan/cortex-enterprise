@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Build output
+dist/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.*
+
+# Relay runtime
+*.lock
+temp/
+uploads/
+logs/
+session.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Config (user-specific)
+config/profile.md

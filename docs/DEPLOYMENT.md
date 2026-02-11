@@ -1,15 +1,40 @@
 # Deployment Guide
 
+All deployment options use **Claude Code** as the sole runtime.
+The only external dependency is the Anthropic API.
+
+## Prerequisites
+
+- Node.js 22+
+- Claude Code CLI (`claude`)
+- Anthropic subscription (`claude login`) or API key (`ANTHROPIC_API_KEY`)
+
 ## Deployment Options
 
 ### 1. Local Workstation
 
 ```bash
-# Run setup
+# macOS / Linux
 ./scripts/setup.sh
+claude login                 # authenticate with subscription (one-time)
+claude --relay --config ~/.cortex/config.yaml
+```
 
-# For SAP environment
+```powershell
+# Windows
+.\scripts\setup.ps1
+claude login                 # authenticate with subscription (one-time)
+claude --relay --config "$HOME\.cortex\config.yaml"
+```
+
+For SAP environment:
+
+```bash
 ./scripts/setup.sh --sap
+```
+
+```powershell
+.\scripts\setup.ps1 -Sap
 ```
 
 ### 2. Docker Container
@@ -20,6 +45,7 @@ FROM node:22-slim
 WORKDIR /app
 COPY . .
 
+RUN npm install -g @anthropic-ai/claude-code
 RUN chmod +x scripts/*.sh
 
 EXPOSE 18789
@@ -27,7 +53,7 @@ EXPOSE 18789
 HEALTHCHECK --interval=30s --timeout=10s \
   CMD ./scripts/health-check.sh || exit 1
 
-CMD ["./scripts/start.sh"]
+CMD ["claude", "--relay", "--config", "/app/configs/enterprise-config.yaml"]
 ```
 
 ```bash
@@ -37,7 +63,7 @@ docker build -t cortex-enterprise .
 # Run
 docker run -d \
   -p 18789:18789 \
-  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e ANTHROPIC_API_KEY=sk-ant-... \    # API key needed in containers
   -v ~/workspace:/root/workspace \
   cortex-enterprise
 ```
@@ -85,6 +111,16 @@ spec:
           periodSeconds: 10
 ```
 
+```bash
+# Create the secret (API key needed for headless/container environments)
+kubectl create secret generic cortex-secrets \
+  --from-literal=anthropic-key=sk-ant-...
+```
+
+> **Note:** Container/headless deployments (Docker, K8s, CF) require an API key
+> since `claude login` (browser OAuth) is not available.  For local workstation
+> use, subscription auth via `claude login` is recommended.
+
 ### 4. Cloud Foundry (SAP BTP)
 
 ```yaml
@@ -95,19 +131,11 @@ applications:
   instances: 1
   buildpacks:
     - nodejs_buildpack
+  command: claude --relay --config configs/sap-config.yaml
   env:
     NODE_ENV: production
   services:
     - xsuaa-instance
-```
-
-## Environment Configuration
-
-### Required Secrets
-
-```bash
-kubectl create secret generic cortex-secrets \
-  --from-literal=anthropic-key=sk-ant-...
 ```
 
 ## Monitoring
@@ -116,19 +144,33 @@ kubectl create secret generic cortex-secrets \
 
 ```bash
 ./scripts/health-check.sh
-
-# JSON output
 ./scripts/health-check.sh --json
 ```
 
+```powershell
+.\scripts\health-check.ps1
+.\scripts\health-check.ps1 -Json
+```
+
+### Relay Logs
+
+The relay writes structured JSON logs (configured in `logging.consoleStyle: json`).
+Forward these to your enterprise log aggregation system (ELK, Splunk, etc.).
+
 ## Troubleshooting
 
-### Gateway won't start
-- Check configuration file exists
-- Verify API keys are set
-- Check port availability
+### Relay won't start
+- Check authentication: run `claude auth status` or verify `ANTHROPIC_API_KEY`
+- If not logged in, run `claude login`
+- Verify config file exists at the expected path
+- Check port 18789 is available
 
 ### Channel connection issues
-- Verify bot tokens
-- Check network connectivity
-- Review permissions
+- Verify bot tokens are set in environment variables
+- Check the channel is `enabled: true` in config
+- Review relay logs for connection errors
+
+### Agent not responding
+- Check Anthropic API status
+- Verify the model `claude-opus-4-6-20250219` is available on your plan
+- Check `contextTokens` is within your API limits

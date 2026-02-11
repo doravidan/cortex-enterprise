@@ -1,0 +1,21 @@
+Implement Claude Code relay with team agents and enterprise channels
+
+- Rewrite entire project to run on Claude Code only (Opus 4.6), no OpenAI/Brave
+- Add core relay engine (src/relay.ts) spawning Claude CLI with enriched prompts
+  Same pattern as godagoo/claude-telegram-relay adapted for enterprise
+- Add team agent router (src/router.ts) with orchestrator, code, devops, sap,
+  security, and research teams
+- Add channel adapters: Slack (Bolt), Microsoft Teams (Bot Framework), webhooks
+- Add persistent memory system (src/memory.ts) with REMEMBER/GOAL/DONE tags
+  and Supabase backend
+- Add enterprise database schema (db/schema.sql) with vector search
+- Add CLAUDE.md for guided conversational setup
+- Add proactive features: smart check-ins and morning briefings (examples/)
+- Add TypeScript setup/verify scripts with full health checks
+- Add 5 skills: code-review, devops, enterprise-research, sap-helpers, security-audit
+- Add enterprise config with 6 team agents and webhook routing
+- Add SAP config with CAP/HANA/BTP-specific teams
+- Add docs: RELAY.md (architecture), TEAMS.md (agent setup), CHANNELS.md
+- Add Windows support: PowerShell setup and health-check scripts
+- Switch auth from API key to Anthropic subscription
+- Add package.json, tsconfig.json, .gitignore, .env.example

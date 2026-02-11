@@ -1,21 +1,41 @@
 # Cortex Enterprise Configuration
-# AI-powered development assistant for enterprise environments
-# Version: 1.0.0
+# Claude Code — the sole runtime engine
+# Model: claude-opus-4-6-20250219
+# Version: 2.0.0
+#
+# This config runs entirely on Claude Code (Anthropic). No OpenAI, no Brave,
+# no third-party AI providers. The relay gateway handles auth, TLS, channels,
+# and routes every request to one of the specialised agent teams below.
 
 # ============================================================================
-# GATEWAY SETTINGS
+# MODEL
+# ============================================================================
+model: claude-opus-4-6-20250219          # Opus 4.6 for all agents
+
+# ============================================================================
+# RELAY / GATEWAY
+# ============================================================================
+# The relay is Claude Code's built-in server process.  It:
+#   1. Listens on port 18789 (TLS + token auth)
+#   2. Accepts connections from enterprise channels (Slack, Teams, Google Chat)
+#   3. Authenticates every request via bearer token
+#   4. Creates / resumes an agent session for the sender
+#   5. Routes the message to the correct team agent (see agents.list)
+#   6. Streams the agent's response back to the channel
+#
+# Start the relay:  claude --relay --config ~/.cortex/config.yaml
 # ============================================================================
 gateway:
   port: 18789
-  mode: local
-  bind: loopback  # Security: localhost only by default
+  mode: relay                             # run as long-lived relay server
+  bind: loopback                          # localhost-only by default
   
   auth:
-    mode: token
+    mode: token                           # bearer-token authentication
     
   tls:
     enabled: true
-    autoGenerate: true
+    autoGenerate: true                    # auto-provision a self-signed cert
     
   controlUi:
     enabled: true
@@ -27,64 +47,274 @@ gateway:
 logging:
   level: info
   consoleLevel: warn
-  consoleStyle: json  # JSON logs for enterprise log aggregation
+  consoleStyle: json                      # structured JSON for log aggregation
   redactSensitive: tools
+  redactPatterns:
+    - "password"
+    - "token"
+    - "api[_-]?key"
+    - "secret"
+    - "credential"
 
 diagnostics:
   enabled: true
   otel:
-    enabled: false  # Enable for enterprise observability
+    enabled: false                        # flip to true for OpenTelemetry
     serviceName: cortex-enterprise
     traces: true
     metrics: true
     logs: true
 
 # ============================================================================
-# AGENT CONFIGURATION
+# AGENT DEFAULTS  (inherited by every team agent)
 # ============================================================================
 agents:
   defaults:
     workspace: ~/workspace
+    model: claude-opus-4-6-20250219
     userTimezone: auto
     timeFormat: "24"
     contextTokens: 200000
     bootstrapMaxChars: 30000
-    thinkingDefault: "low"
+    thinkingDefault: "high"               # Opus 4.6 extended thinking
     verboseDefault: "off"
-    
+
+    # Memory — Claude Code built-in (no OpenAI embeddings)
     memorySearch:
       enabled: true
-      provider: openai
+      provider: anthropic                 # Claude Code native memory
       sources:
         - memory
       sync:
         onSessionStart: true
         watch: true
-        
+      query:
+        maxResults: 10
+        minScore: 0.6
+
     compaction:
       mode: safeguard
       memoryFlush:
         enabled: true
-        
+
+    # Team concurrency
     subagents:
-      maxConcurrent: 3
+      maxConcurrent: 5                    # up to 5 team members working in parallel
       archiveAfterMinutes: 60
 
+    # Claude Code as the CLI backend
+    cliBackends:
+      claude:
+        command: claude
+        args: ["--model", "claude-opus-4-6-20250219"]
+
+  # ========================================================================
+  # TEAM AGENTS
+  # ========================================================================
+  # Each agent below is a specialised "team member". The orchestrator
+  # receives every inbound message and delegates to the right team.
+  # ========================================================================
   list:
-    - id: enterprise
-      name: "Enterprise Assistant"
+    # ------------------------------------------------------------------
+    # ORCHESTRATOR  (default — receives all messages)
+    # ------------------------------------------------------------------
+    - id: orchestrator
+      name: "Cortex Orchestrator"
       default: true
       workspace: ~/workspace
-      
+
       identity:
         name: "Cortex"
         emoji: "🧠"
-        
+
+      description: >
+        You are the central orchestrator.  Analyse every incoming request
+        and delegate to the best team agent.  Use /team code for coding
+        tasks, /team devops for infrastructure, /team sap for SAP work,
+        /team security for audits, and /team research for investigation.
+        If the task is small or conversational, handle it yourself.
+
       tools:
         profile: full
         deny:
           - voice_call
-          
+
+      skills:
+        - enterprise-research
+
+      groupChat:
+        historyLimit: 50
+
+    # ------------------------------------------------------------------
+    # CODE TEAM — coding, review, refactoring, PR management
+    # ------------------------------------------------------------------
+    - id: code
+      name: "Code Team"
+      workspace: ~/workspace
+
+      identity:
+        name: "Cortex Coder"
+        emoji: "💻"
+
+      description: >
+        You are the code team.  You write, review, refactor, and ship code.
+        You create pull requests, run tests, and perform code reviews.
+        Always follow the project's coding standards and test coverage
+        requirements.
+
+      tools:
+        profile: full
+        deny:
+          - voice_call
+        allow:
+          - read
+          - write
+          - edit
+          - exec
+          - git
+          - github
+          - browser
+
+      skills:
+        - code-review
+        - github
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # DEVOPS TEAM — CI/CD, deployment, infrastructure, Docker, K8s
+    # ------------------------------------------------------------------
+    - id: devops
+      name: "DevOps Team"
+      workspace: ~/workspace
+
+      identity:
+        name: "Cortex DevOps"
+        emoji: "🚀"
+
+      description: >
+        You are the DevOps team.  You manage deployments, CI/CD pipelines,
+        Docker images, Kubernetes manifests, Cloud Foundry apps, and
+        infrastructure-as-code.  Always validate changes in staging before
+        production.
+
+      tools:
+        profile: full
+        deny:
+          - voice_call
+        allow:
+          - exec
+          - read
+          - write
+          - edit
+          - git
+          - browser
+
+      skills:
+        - devops
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # SAP TEAM — CAP, CF, HANA, BTP, Kyma
+    # ------------------------------------------------------------------
+    - id: sap
+      name: "SAP Team"
+      workspace: ~/workspace
+
+      identity:
+        name: "Cortex SAP"
+        emoji: "💎"
+
+      description: >
+        You are the SAP team.  You build CAP applications, manage Cloud
+        Foundry deployments, query HANA databases, configure BTP services,
+        and work with Kyma/Kubernetes.  Follow SAP best practices and
+        security guidelines.
+
+      tools:
+        profile: full
+        deny:
+          - voice_call
+        allow:
+          - exec
+          - read
+          - write
+          - edit
+          - git
+          - browser
+
+      skills:
+        - sap-helpers
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # SECURITY TEAM — audits, compliance, vulnerability scanning
+    # ------------------------------------------------------------------
+    - id: security
+      name: "Security Team"
+      workspace: ~/workspace
+
+      identity:
+        name: "Cortex Security"
+        emoji: "🔒"
+
+      description: >
+        You are the security team.  You perform security audits, check
+        dependencies for vulnerabilities, review authentication flows,
+        verify TLS configurations, and ensure compliance with GDPR /
+        SOC 2 / SAP security standards.
+
+      tools:
+        profile: full
+        deny:
+          - voice_call
+        allow:
+          - exec
+          - read
+          - git
+          - browser
+
+      skills:
+        - security-audit
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # RESEARCH TEAM — investigation, documentation, knowledge
+    # ------------------------------------------------------------------
+    - id: research
+      name: "Research Team"
+      workspace: ~/workspace
+
+      identity:
+        name: "Cortex Research"
+        emoji: "🔍"
+
+      description: >
+        You are the research team.  You investigate issues, search
+        codebases, read documentation, summarise findings, and build
+        knowledge base entries.  Prefer depth over speed — be thorough.
+
+      tools:
+        profile: full
+        deny:
+          - voice_call
+        allow:
+          - read
+          - exec
+          - browser
+          - web_search
+          - web_fetch
+
+      skills:
+        - enterprise-research
+
       groupChat:
         historyLimit: 50
 
@@ -95,25 +325,26 @@ tools:
   profile: full
   deny:
     - voice_call
-    
+
   web:
     search:
       enabled: true
-      provider: brave
+      provider: anthropic                 # Claude Code built-in web search
       maxResults: 10
       timeoutSeconds: 30
-      
+
     fetch:
       enabled: true
       maxChars: 100000
       timeoutSeconds: 60
-      
+
   exec:
-    host: gateway
+    host: gateway                         # execute via the relay gateway
     security: allowlist
     ask: "on-miss"
     timeoutSec: 300
     safeBins:
+      # Core utilities
       - cat
       - ls
       - pwd
@@ -124,14 +355,34 @@ tools:
       - wc
       - sort
       - uniq
+      - mkdir
+      - cp
+      - mv
+      - rm
+      # Dev tools
       - git
       - npm
+      - npx
       - node
       - python3
-      - cf
-      - kubectl
+      - pip
+      # Claude Code
+      - claude
+      # Containers & orchestration
       - docker
-      
+      - docker-compose
+      - kubectl
+      - helm
+      # SAP toolchain
+      - cf
+      - cds
+      - hdbsql
+      - mvn
+      - gradle
+      # Security
+      - npm audit
+      - trivy
+
   message:
     crossContext:
       allowWithinProvider: true
@@ -144,29 +395,27 @@ tools:
 # ============================================================================
 channels:
   slack:
-    enabled: false
+    enabled: false                        # set true + provide tokens to activate
     dmPolicy: allowlist
     groupPolicy: allowlist
     configWrites: false
-    
+
   msteams:
     enabled: false
     dmPolicy: allowlist
     groupPolicy: allowlist
 
-# ============================================================================
-# DISABLED CONSUMER CHANNELS
-# ============================================================================
-  telegram:
+  googlechat:
     enabled: false
-  whatsapp:
-    enabled: false
-  signal:
-    enabled: false
-  imessage:
-    enabled: false
-  discord:
-    enabled: false
+    dmPolicy: allowlist
+    groupPolicy: allowlist
+
+  # Consumer channels — permanently disabled
+  telegram:  { enabled: false }
+  whatsapp:  { enabled: false }
+  signal:    { enabled: false }
+  imessage:  { enabled: false }
+  discord:   { enabled: false }
 
 # ============================================================================
 # PLUGINS
@@ -182,16 +431,12 @@ plugins:
     - discord
     - nostr
     - twitch
-    
+
   entries:
-    slack:
-      enabled: true
-    msteams:
-      enabled: true
-    googlechat:
-      enabled: true
-    memory-core:
-      enabled: true
+    slack:       { enabled: true }
+    msteams:     { enabled: true }
+    googlechat:  { enabled: true }
+    memory-core: { enabled: true }
 
 # ============================================================================
 # SESSION MANAGEMENT
@@ -209,7 +454,7 @@ session:
 # ============================================================================
 cron:
   enabled: true
-  maxConcurrentRuns: 3
+  maxConcurrentRuns: 5
 
 # ============================================================================
 # WEBHOOKS
@@ -217,9 +462,30 @@ cron:
 hooks:
   enabled: true
   maxBodyBytes: 1048576
+  mappings:
+    - id: ci-webhook
+      match:
+        path: /hooks/ci
+      action: agent
+      agentId: devops
+      messageTemplate: "CI event: {{body.event}} on {{body.repo}} — {{body.status}}"
+
+    - id: pr-webhook
+      match:
+        path: /hooks/pr
+      action: agent
+      agentId: code
+      messageTemplate: "PR {{body.action}}: #{{body.number}} in {{body.repo}} by {{body.sender}}"
+
+    - id: security-alert
+      match:
+        path: /hooks/security
+      action: agent
+      agentId: security
+      messageTemplate: "Security alert: {{body.severity}} — {{body.title}} in {{body.package}}"
 
 # ============================================================================
-# MEMORY
+# MEMORY  (Claude Code native — no external provider)
 # ============================================================================
 memory:
   backend: builtin
@@ -242,7 +508,6 @@ skills:
   allowBundled:
     - github
     - coding-agent
-    - 1password
 
 # ============================================================================
 # COMMANDS

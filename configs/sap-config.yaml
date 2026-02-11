@@ -1,89 +1,68 @@
 # Cortex SAP Configuration
-# AI assistant optimized for SAP development workflows
-# Version: 1.0.0
+# Claude Code — optimised for SAP development workflows
+# Model: claude-opus-4-6-20250219
+# Version: 2.0.0
+#
+# Extends the enterprise config with SAP-specific teams, skills, webhooks,
+# and a larger context window for complex CAP / HANA workloads.
+# Everything runs on Claude Code — no external AI providers.
 
 # ============================================================================
-# SAP DEVELOPMENT ENVIRONMENT
+# MODEL
+# ============================================================================
+model: claude-opus-4-6-20250219
+
+# ============================================================================
+# RELAY / GATEWAY
+# ============================================================================
+gateway:
+  port: 18789
+  mode: relay
+  bind: loopback
+
+  auth:
+    mode: token
+
+  tls:
+    enabled: true
+    autoGenerate: true
+
+  controlUi:
+    enabled: true
+    allowInsecureAuth: false
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+logging:
+  level: info
+  consoleStyle: json
+  redactSensitive: tools
+  redactPatterns:
+    - "password"
+    - "token"
+    - "api[_-]?key"
+    - "secret"
+    - "credential"
+    - "hana.*password"
+
+# ============================================================================
+# AGENT DEFAULTS
 # ============================================================================
 agents:
   defaults:
     workspace: ~/sap-workspace
+    model: claude-opus-4-6-20250219
     bootstrapMaxChars: 50000
-    contextTokens: 250000
-    
-    cliBackends:
-      codex:
-        command: codex
-        args: ["--dangerously-auto-approve"]
-        
-  list:
-    - id: sap-developer
-      name: "SAP Development Assistant"
-      default: true
-      workspace: ~/sap-workspace
-      
-      identity:
-        name: "Cortex SAP"
-        emoji: "💎"
-        
-      skills:
-        - github
-        - coding-agent
-        - supabase
+    contextTokens: 250000                 # larger window for SAP projects
+    thinkingDefault: "high"
+    verboseDefault: "off"
+    userTimezone: auto
+    timeFormat: "24"
 
-# ============================================================================
-# SAP CLI TOOLS
-# ============================================================================
-tools:
-  exec:
-    host: gateway
-    security: allowlist
-    safeBins:
-      # Standard tools
-      - cat
-      - ls
-      - pwd
-      - grep
-      - find
-      - git
-      - npm
-      - node
-      - python3
-      
-      # SAP Cloud Foundry
-      - cf
-      
-      # SAP CAP Development
-      - cds
-      - npx
-      
-      # SAP BTP / Kubernetes
-      - kubectl
-      - helm
-      
-      # SAP HANA
-      - hdbsql
-      
-      # Docker
-      - docker
-      - docker-compose
-      
-      # Build Tools
-      - mvn
-      - gradle
-
-# ============================================================================
-# SAP MEMORY CONTEXT
-# ============================================================================
-memory:
-  backend: builtin
-  citations: "on"
-
-agents:
-  defaults:
     memorySearch:
       enabled: true
-      provider: openai
+      provider: anthropic
       sources:
         - memory
       extraPaths:
@@ -96,6 +75,266 @@ agents:
         maxResults: 10
         minScore: 0.6
 
+    compaction:
+      mode: safeguard
+      memoryFlush:
+        enabled: true
+
+    subagents:
+      maxConcurrent: 5
+      archiveAfterMinutes: 60
+
+    cliBackends:
+      claude:
+        command: claude
+        args: ["--model", "claude-opus-4-6-20250219"]
+
+  # ========================================================================
+  # SAP TEAM AGENTS
+  # ========================================================================
+  list:
+    # ------------------------------------------------------------------
+    # ORCHESTRATOR
+    # ------------------------------------------------------------------
+    - id: orchestrator
+      name: "Cortex SAP Orchestrator"
+      default: true
+      workspace: ~/sap-workspace
+
+      identity:
+        name: "Cortex SAP"
+        emoji: "💎"
+
+      description: >
+        You are the SAP development orchestrator.  Route incoming requests
+        to the appropriate team: /team cap for CAP development, /team hana
+        for database work, /team btp for Cloud Foundry & BTP services,
+        /team code for general coding, /team security for audits.
+
+      tools:
+        profile: full
+        deny: [voice_call]
+
+      skills:
+        - sap-helpers
+        - enterprise-research
+
+      groupChat:
+        historyLimit: 50
+
+    # ------------------------------------------------------------------
+    # CAP DEVELOPMENT TEAM
+    # ------------------------------------------------------------------
+    - id: cap
+      name: "CAP Development Team"
+      workspace: ~/sap-workspace
+
+      identity:
+        name: "Cortex CAP"
+        emoji: "🏗️"
+
+      description: >
+        You are the CAP development team.  You build SAP Cloud Application
+        Programming Model projects — CDS models, services, custom handlers,
+        Fiori UIs, and OData APIs.  Always use `cds build` before deploy,
+        follow CAP best practices, and write proper unit tests.
+
+      tools:
+        profile: full
+        deny: [voice_call]
+        allow: [read, write, edit, exec, git, browser]
+
+      skills:
+        - sap-helpers
+        - code-review
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # HANA TEAM — database, SQL, HDI, data modelling
+    # ------------------------------------------------------------------
+    - id: hana
+      name: "HANA Database Team"
+      workspace: ~/sap-workspace
+
+      identity:
+        name: "Cortex HANA"
+        emoji: "🗄️"
+
+      description: >
+        You are the HANA database team.  You design data models, write
+        SQL and SQLScript, manage HDI containers, optimise queries, and
+        handle HANA Cloud administration.  Always validate SQL before
+        running against production.
+
+      tools:
+        profile: full
+        deny: [voice_call]
+        allow: [read, write, edit, exec, git]
+
+      skills:
+        - sap-helpers
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # BTP / CLOUD FOUNDRY TEAM
+    # ------------------------------------------------------------------
+    - id: btp
+      name: "BTP Platform Team"
+      workspace: ~/sap-workspace
+
+      identity:
+        name: "Cortex BTP"
+        emoji: "☁️"
+
+      description: >
+        You are the BTP platform team.  You manage Cloud Foundry apps,
+        SAP BTP services (XSUAA, Destination, Connectivity), Kyma
+        deployments, and CI/CD pipelines.  Always check `cf target`
+        before operations and use blue-green deployments for production.
+
+      tools:
+        profile: full
+        deny: [voice_call]
+        allow: [exec, read, write, edit, git, browser]
+
+      skills:
+        - sap-helpers
+        - devops
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # CODE TEAM — general coding, review, refactoring
+    # ------------------------------------------------------------------
+    - id: code
+      name: "Code Team"
+      workspace: ~/sap-workspace
+
+      identity:
+        name: "Cortex Coder"
+        emoji: "💻"
+
+      description: >
+        You are the code team.  You write, review, and refactor code
+        across all languages used in SAP projects (JavaScript, TypeScript,
+        Java, Python, CDS).  You manage PRs and enforce coding standards.
+
+      tools:
+        profile: full
+        deny: [voice_call]
+        allow: [read, write, edit, exec, git, github, browser]
+
+      skills:
+        - code-review
+
+      groupChat:
+        historyLimit: 30
+
+    # ------------------------------------------------------------------
+    # SECURITY TEAM
+    # ------------------------------------------------------------------
+    - id: security
+      name: "Security Team"
+      workspace: ~/sap-workspace
+
+      identity:
+        name: "Cortex Security"
+        emoji: "🔒"
+
+      description: >
+        You are the security team.  You audit XSUAA configurations,
+        check role collections, validate OAuth flows, scan dependencies,
+        and ensure compliance with SAP security guidelines.
+
+      tools:
+        profile: full
+        deny: [voice_call]
+        allow: [exec, read, git, browser]
+
+      skills:
+        - security-audit
+
+      groupChat:
+        historyLimit: 30
+
+# ============================================================================
+# TOOL CONFIGURATION
+# ============================================================================
+tools:
+  profile: full
+  deny: [voice_call]
+
+  web:
+    search:
+      enabled: true
+      provider: anthropic
+      maxResults: 10
+      timeoutSeconds: 30
+    fetch:
+      enabled: true
+      maxChars: 100000
+      timeoutSeconds: 60
+
+  exec:
+    host: gateway
+    security: allowlist
+    ask: "on-miss"
+    timeoutSec: 300
+    safeBins:
+      # Core
+      - cat
+      - ls
+      - pwd
+      - grep
+      - find
+      - head
+      - tail
+      - wc
+      - sort
+      - uniq
+      - mkdir
+      - cp
+      - mv
+      - rm
+      # Dev
+      - git
+      - npm
+      - npx
+      - node
+      - python3
+      - pip
+      # Claude Code
+      - claude
+      # SAP Cloud Foundry
+      - cf
+      # SAP CAP
+      - cds
+      # SAP HANA
+      - hdbsql
+      # BTP / Kubernetes
+      - kubectl
+      - helm
+      # Containers
+      - docker
+      - docker-compose
+      # Build tools
+      - mvn
+      - gradle
+      # Security
+      - trivy
+
+  message:
+    crossContext:
+      allowWithinProvider: true
+      allowAcrossProviders: false
+      marker:
+        enabled: true
+
 # ============================================================================
 # ENTERPRISE CHANNELS
 # ============================================================================
@@ -104,26 +343,53 @@ channels:
     enabled: false
     dmPolicy: allowlist
     groupPolicy: allowlist
-    
   slack:
     enabled: false
     dmPolicy: allowlist
     groupPolicy: allowlist
+  googlechat:
+    enabled: false
+    dmPolicy: allowlist
+    groupPolicy: allowlist
+
+  # Consumer — permanently disabled
+  telegram:  { enabled: false }
+  whatsapp:  { enabled: false }
+  signal:    { enabled: false }
+  imessage:  { enabled: false }
+  discord:   { enabled: false }
 
 # ============================================================================
-# SKILLS
+# PLUGINS
 # ============================================================================
-skills:
-  load:
-    watch: true
-    extraDirs:
-      - ~/sap-workspace/skills
-      
+plugins:
+  enabled: true
+  deny:
+    - voice-call
+    - telegram
+    - whatsapp
+    - signal
+    - imessage
+    - discord
+    - nostr
+    - twitch
+
   entries:
-    github:
-      enabled: true
-    coding-agent:
-      enabled: true
+    slack:       { enabled: true }
+    msteams:     { enabled: true }
+    googlechat:  { enabled: true }
+    memory-core: { enabled: true }
+
+# ============================================================================
+# SESSION
+# ============================================================================
+session:
+  scope: per-sender
+  dmScope: per-channel-peer
+  reset:
+    mode: daily
+    atHour: 3
+  typingMode: thinking
 
 # ============================================================================
 # SCHEDULED JOBS
@@ -137,56 +403,70 @@ cron:
 # ============================================================================
 hooks:
   enabled: true
+  maxBodyBytes: 1048576
   mappings:
     - id: sap-deploy-webhook
       match:
-        path: /sap/deploy
+        path: /hooks/sap/deploy
       action: agent
+      agentId: btp
       messageTemplate: "SAP Deployment triggered: {{body.project}} to {{body.environment}}"
-      
+
     - id: cap-build-webhook
       match:
-        path: /cap/build
+        path: /hooks/cap/build
       action: agent
+      agentId: cap
       messageTemplate: "CAP Build: {{body.status}} for {{body.service}}"
 
-# ============================================================================
-# SECURITY
-# ============================================================================
-gateway:
-  auth:
-    mode: token
-    
-  tls:
-    enabled: true
-    autoGenerate: true
+    - id: hana-alert-webhook
+      match:
+        path: /hooks/hana/alert
+      action: agent
+      agentId: hana
+      messageTemplate: "HANA Alert: {{body.severity}} — {{body.message}} on {{body.instance}}"
 
-logging:
-  level: info
-  consoleStyle: json
-  redactSensitive: tools
-  redactPatterns:
-    - "password"
-    - "token"
-    - "api[_-]?key"
-    - "secret"
-    - "credential"
+    - id: security-alert
+      match:
+        path: /hooks/security
+      action: agent
+      agentId: security
+      messageTemplate: "Security alert: {{body.severity}} — {{body.title}}"
 
 # ============================================================================
-# DISABLED FEATURES
+# MEMORY  (Claude Code native)
 # ============================================================================
-plugins:
-  deny:
-    - voice-call
-    - telegram
-    - whatsapp
-    - signal
-    - imessage
-    - discord
-    - nostr
-    - twitch
+memory:
+  backend: builtin
+  citations: "on"
 
+# ============================================================================
+# BROWSER
+# ============================================================================
+browser:
+  enabled: true
+  headless: true
+  evaluateEnabled: true
+
+# ============================================================================
+# SKILLS
+# ============================================================================
+skills:
+  load:
+    watch: true
+    extraDirs:
+      - ~/sap-workspace/skills
+  allowBundled:
+    - github
+    - coding-agent
+
+# ============================================================================
+# COMMANDS
+# ============================================================================
 commands:
+  native: auto
+  nativeSkills: auto
+  text: true
   bash: false
   config: false
   restart: false
