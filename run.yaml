@@ -10,10 +10,11 @@ cxdb:
     enabled: false
 
 llm:
-  cli_profile: real
+  cli_profile: test_shim
   providers:
     anthropic:
       backend: cli
+      executable: /usr/local/bin/claude-auto
 
 modeldb:
   openrouter_model_info_path: /tmp/kilroy/internal/attractor/modeldb/pinned/openrouter_models.json

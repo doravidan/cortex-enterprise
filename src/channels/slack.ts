@@ -21,8 +21,8 @@ export async function startSlack(): Promise<void> {
   }
 
   slackApp = new App({
-    token,
-    appToken,
+    token: token!,
+    appToken: appToken!,
     socketMode: true,
   });
 
@@ -61,7 +61,7 @@ export async function startSlack(): Promise<void> {
   // Handle app mentions in channels
   slackApp.event("app_mention", async ({ event, say }) => {
     const text = event.text.replace(/<@[A-Z0-9]+>/g, "").trim(); // Strip mention
-    const sender = event.user;
+    const sender = event.user || "unknown";
 
     const { teamId, cleanText } = parseTeamFromMessage(text);
 

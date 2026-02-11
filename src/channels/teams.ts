@@ -43,7 +43,7 @@ export async function startTeams(port: number): Promise<void> {
       req.on("data", (chunk) => (body += chunk));
       req.on("end", async () => {
         try {
-          await adapter!.process(req, res, async (context: TurnContext) => {
+          await adapter!.process(req, res as any, async (context: TurnContext) => {
             if (context.activity.type === ActivityTypes.Message) {
               const text = context.activity.text || "";
               const sender = context.activity.from?.name || "unknown";

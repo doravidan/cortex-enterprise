@@ -153,7 +153,7 @@ function setupConfig(): void {
 // ── Main ────────────────────────────────────────────────────
 
 function main() {
-  const platform = { darwin: "macOS", win32: "Windows", linux: "Linux" }[process.platform] || process.platform;
+  const platform = ({ darwin: "macOS", win32: "Windows", linux: "Linux" } as Record<string, string>)[process.platform] || process.platform;
 
   console.log("");
   console.log(bold("  Cortex Enterprise — Setup"));
