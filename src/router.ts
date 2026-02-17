@@ -1,9 +1,9 @@
 /**
- * Team Agent Router
+ * Cortex Enterprise Router
  *
- * Maps team IDs to their identity and system prompts.
- * The orchestrator decides which team handles a message;
- * this module provides the context for that team.
+ * - Team catalog (system prompts)
+ * - Conversation context tracking (lightweight)
+ * - Heuristic routing + optional LLM intent hook
  */
 
 export type TeamId =
@@ -30,128 +30,182 @@ const TEAMS: Record<TeamId, TeamConfig> = {
     name: "Cortex Orchestrator",
     emoji: "🧠",
     systemPrompt:
-      "You are the central orchestrator. Analyse the request and either handle it " +
-      "directly (if simple/conversational) or indicate which team should handle it: " +
-      "code (coding, PRs), devops (deployments, CI/CD), sap (CAP, HANA, BTP), " +
-      "security (audits, compliance), or research (investigation, docs).",
+      "You are the central orchestrator. Analyze the request and either handle it directly " +
+      "(if simple/conversational) or route to a specialist team. Keep answers concise and actionable.",
   },
   code: {
     id: "code",
     name: "Cortex Coder",
     emoji: "💻",
     systemPrompt:
-      "You are the code team. You write, review, refactor, and ship code. " +
-      "Create pull requests, run tests, perform code reviews. Follow project " +
-      "coding standards and test coverage requirements.",
+      "You are the code team. You write, review, refactor, and ship code. Prefer small, safe diffs; run tests and typechecks.",
   },
   devops: {
     id: "devops",
     name: "Cortex DevOps",
     emoji: "🚀",
     systemPrompt:
-      "You are the DevOps team. You manage deployments, CI/CD pipelines, " +
-      "Docker images, Kubernetes manifests, Cloud Foundry apps, and " +
-      "infrastructure. Always validate in staging before production.",
+      "You are the DevOps team. You manage deployments, CI/CD, Docker/K8s, observability, and incident response. Prefer staged rollouts.",
   },
   sap: {
     id: "sap",
     name: "Cortex SAP",
     emoji: "💎",
     systemPrompt:
-      "You are the SAP team. You build CAP applications, manage Cloud Foundry " +
-      "deployments, query HANA databases, configure BTP services, and work " +
-      "with Kyma/Kubernetes. Follow SAP best practices.",
+      "You are the SAP team. You work on CAP, HANA, BTP, CF/Kyma, XSUAA, Destinations, and SAP best practices.",
   },
   cap: {
     id: "cap",
     name: "Cortex CAP",
-    emoji: "🏗️",
+    emoji: "🗺️",
     systemPrompt:
-      "You are the CAP development team. You build SAP Cloud Application " +
-      "Programming Model projects — CDS models, services, custom handlers, " +
-      "Fiori UIs, and OData APIs. Use cds build before deploy.",
+      "You are the CAP development team. You build CDS models, services, handlers, and OData APIs. Validate with cds build and tests.",
   },
   hana: {
     id: "hana",
     name: "Cortex HANA",
     emoji: "🗄️",
     systemPrompt:
-      "You are the HANA database team. You design data models, write SQL and " +
-      "SQLScript, manage HDI containers, optimise queries, and handle HANA " +
-      "Cloud administration. Always validate SQL before production.",
+      "You are the HANA database team. You design data models, write SQL/SQLScript, manage HDI, optimize queries, and handle HANA ops.",
   },
   btp: {
     id: "btp",
     name: "Cortex BTP",
     emoji: "☁️",
     systemPrompt:
-      "You are the BTP platform team. You manage Cloud Foundry apps, SAP BTP " +
-      "services (XSUAA, Destination, Connectivity), Kyma deployments, and " +
-      "CI/CD pipelines. Use blue-green deployments for production.",
+      "You are the BTP platform team. You manage CF spaces, BTP services, XSUAA/Destination/Connectivity, and deployments.",
   },
   security: {
     id: "security",
     name: "Cortex Security",
     emoji: "🔒",
     systemPrompt:
-      "You are the security team. You perform security audits, check " +
-      "dependencies for vulnerabilities, review authentication flows, " +
-      "verify TLS, and ensure GDPR/SOC2/SAP compliance.",
+      "You are the security team. You perform audits, review authn/authz, data classification, approvals, and compliance. Default-deny when unsure.",
   },
   research: {
     id: "research",
     name: "Cortex Research",
-    emoji: "🔍",
+    emoji: "🔎",
     systemPrompt:
-      "You are the research team. You investigate issues, search codebases, " +
-      "read documentation, summarise findings, and build knowledge base " +
-      "entries. Prefer depth over speed.",
+      "You are the research team. You investigate, read docs/code, summarize findings, and propose next steps with sources.",
   },
 };
 
-/**
- * Get the team configuration for a given team ID.
- * Falls back to orchestrator for unknown IDs.
- */
+/** Get the team configuration for a given team ID. */
 export function routeToTeam(teamId: TeamId): TeamConfig {
   return TEAMS[teamId] || TEAMS.orchestrator;
 }
 
 /**
  * Parse team routing from a message.
- * Supports:  /team code   /team devops   @cortex-coder   etc.
+ * Supports:  /team code   /team devops   @cortex-coder
  */
 export function parseTeamFromMessage(text: string): { teamId: TeamId | null; cleanText: string } {
-  // /team <id> syntax
   const teamMatch = text.match(/^\/team\s+(\w+)\s*/i);
   if (teamMatch) {
     const id = teamMatch[1].toLowerCase() as TeamId;
-    if (TEAMS[id]) {
-      return {
-        teamId: id,
-        cleanText: text.replace(teamMatch[0], "").trim(),
-      };
-    }
+    if (TEAMS[id]) return { teamId: id, cleanText: text.replace(teamMatch[0], "").trim() };
   }
 
-  // @cortex-<team> syntax
   const mentionMatch = text.match(/@cortex[-_](\w+)\s*/i);
   if (mentionMatch) {
     const id = mentionMatch[1].toLowerCase() as TeamId;
-    if (TEAMS[id]) {
-      return {
-        teamId: id,
-        cleanText: text.replace(mentionMatch[0], "").trim(),
-      };
-    }
+    if (TEAMS[id]) return { teamId: id, cleanText: text.replace(mentionMatch[0], "").trim() };
   }
 
   return { teamId: null, cleanText: text };
 }
 
-/**
- * Get all available team IDs.
- */
 export function getTeamIds(): TeamId[] {
   return Object.keys(TEAMS) as TeamId[];
+}
+
+// ============================================================
+// Conversation context tracking
+// ============================================================
+
+export interface ConversationContext {
+  /** stable channel thread / user / room identifier */
+  conversationId: string;
+  activeTeam: TeamId;
+  lastIntent?: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Update an existing conversation context.
+ */
+export function updateConversationContext(
+  ctx: ConversationContext,
+  patch: Partial<Omit<ConversationContext, "conversationId">>
+): ConversationContext {
+  return {
+    ...ctx,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// ============================================================
+// Heuristic routing + optional LLM intent hook
+// ============================================================
+
+export interface IntentHookResult {
+  teamId?: TeamId;
+  intent?: string;
+  confidence?: number;
+}
+
+export type IntentHook = (input: { text: string; currentTeam: TeamId }) => Promise<IntentHookResult | null>;
+
+/**
+ * Heuristic team selection (no LLM calls).
+ */
+export function chooseTeamHeuristically(text: string): { teamId: TeamId; reason: string } {
+  const t = text.toLowerCase();
+
+  const matchAny = (xs: string[]) => xs.some((x) => t.includes(x));
+
+  if (matchAny(["vulnerability", "cve", "soc2", "gdpr", "pii", "secrets", "rbac", "audit", "approval"])) {
+    return { teamId: "security", reason: "security keywords" };
+  }
+  if (matchAny(["docker", "kubernetes", "helm", "ci", "cd", "pipeline", "deploy", "terraform", "observability", "prometheus", "grafana"])) {
+    return { teamId: "devops", reason: "devops keywords" };
+  }
+  if (matchAny(["cap", "cds", "xsuaa", "btp", "cloud foundry", "hana", "fiori", "ui5", "mta.yaml", "integration suite"])) {
+    return { teamId: "sap", reason: "sap keywords" };
+  }
+  if (matchAny(["pull request", "pr ", "typescript", "refactor", "unit test", "bug", "compile", "tsc", "npm", "pnpm"])) {
+    return { teamId: "code", reason: "code keywords" };
+  }
+  if (matchAny(["research", "investigate", "docs", "confluence", "sharepoint"])) {
+    return { teamId: "research", reason: "research keywords" };
+  }
+
+  return { teamId: "orchestrator", reason: "default" };
+}
+
+/**
+ * Choose a team for text. Uses heuristic routing and optionally an intent hook.
+ */
+export async function chooseTeam(params: {
+  text: string;
+  currentTeam: TeamId;
+  intentHook?: IntentHook;
+}): Promise<{ teamId: TeamId; intent?: string; reason: string }> {
+  const heuristic = chooseTeamHeuristically(params.text);
+
+  if (params.intentHook) {
+    try {
+      const r = await params.intentHook({ text: params.text, currentTeam: params.currentTeam });
+      if (r?.teamId && TEAMS[r.teamId]) {
+        return { teamId: r.teamId, intent: r.intent, reason: "intentHook" };
+      }
+    } catch {
+      // ignore hook failures
+    }
+  }
+
+  return { teamId: heuristic.teamId, reason: heuristic.reason };
 }

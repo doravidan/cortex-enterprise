@@ -1,25 +1,28 @@
 /**
  * Webhook Channel Adapter
  *
- * HTTP server that accepts inbound webhooks from CI/CD, monitoring,
- * and other enterprise systems.  Routes directly to team agents.
+ * HTTP server that accepts inbound webhooks and routes them to team agents.
  *
- * Endpoints:
- *   POST /hooks/ci        → DevOps team
- *   POST /hooks/pr        → Code team
- *   POST /hooks/security  → Security team
- *   POST /hooks/sap/*     → SAP team
- *   POST /message         → Orchestrator (general messages)
- *   GET  /health          → Health check
+ * Backward-compatible endpoints:
+ * - POST /message
+ * - POST /hooks/* (legacy)
+ *
+ * New routers:
+ * - POST /webhooks/github
+ * - POST /webhooks/jira
+ * - POST /webhooks/generic
  */
 
 import express from "express";
 import crypto from "node:crypto";
-import { handleMessage, splitResponse, type IncomingMessage } from "../relay.js";
+import { handleMessage, type IncomingMessage } from "../relay.js";
 import type { TeamId } from "../router.js";
+import { createGitHubWebhookRouter } from "../webhooks/github-webhook.js";
+import { createJiraWebhookRouter } from "../webhooks/jira-webhook.js";
+import { createGenericWebhookRouter } from "../webhooks/generic-webhook.js";
 
-// Webhook route → team agent mapping
-const WEBHOOK_ROUTES: Record<string, TeamId> = {
+// Legacy webhook route  team mapping
+const LEGACY_ROUTES: Record<string, TeamId> = {
   "/hooks/ci": "devops",
   "/hooks/pr": "code",
   "/hooks/security": "security",
@@ -32,29 +35,25 @@ const WEBHOOK_ROUTES: Record<string, TeamId> = {
 
 export async function startWebhookServer(port: number): Promise<void> {
   const app = express();
-  app.use(express.json({ limit: "1mb" }));
 
-  // ── Health check ──────────────────────────────────────────
+  // Health
   app.get("/health", (_req, res) => {
-    res.json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      provider: "anthropic",
-      model: "claude-opus-4-6-20250219",
-      uptime: process.uptime(),
-    });
+    res.json({ status: "healthy", ts: new Date().toISOString(), uptime: process.uptime() });
   });
 
-  // ── General message endpoint ──────────────────────────────
-  app.post("/message", async (req, res) => {
-    const { text, sender, team } = req.body;
+  // New routers
+  app.use("/webhooks/github", createGitHubWebhookRouter());
+  app.use("/webhooks/jira", createJiraWebhookRouter());
+  app.use("/webhooks/generic", createGenericWebhookRouter());
 
+  // General message endpoint (JSON)
+  app.post("/message", express.json({ limit: "1mb" }), async (req, res) => {
+    const { text, sender, team } = req.body ?? {};
     if (!text) {
       res.status(400).json({ error: "Missing 'text' field" });
       return;
     }
-
-    if (!validateWebhook(req)) {
+    if (!validateWebhookJson(req)) {
       res.status(401).json({ error: "Invalid webhook secret" });
       return;
     }
@@ -76,18 +75,15 @@ export async function startWebhookServer(port: number): Promise<void> {
     }
   });
 
-  // ── Routed webhook endpoints ──────────────────────────────
-  for (const [path, teamId] of Object.entries(WEBHOOK_ROUTES)) {
-    app.post(path, async (req, res) => {
-      if (!validateWebhook(req)) {
+  // Legacy routes
+  for (const [path, teamId] of Object.entries(LEGACY_ROUTES)) {
+    app.post(path, express.json({ limit: "1mb" }), async (req, res) => {
+      if (!validateWebhookJson(req)) {
         res.status(401).json({ error: "Invalid webhook secret" });
         return;
       }
 
-      // Build a message from the webhook payload
-      const body = req.body;
-      const summary = buildWebhookSummary(path, body);
-
+      const summary = buildLegacySummary(path, req.body ?? {});
       const incoming: IncomingMessage = {
         text: summary,
         channel: "webhook",
@@ -106,72 +102,46 @@ export async function startWebhookServer(port: number): Promise<void> {
     });
   }
 
-  // ── Start server ──────────────────────────────────────────
   app.listen(port, () => {
     console.log(`[WEBHOOK] Server listening on port ${port}`);
-    console.log(`[WEBHOOK] Health:  http://localhost:${port}/health`);
-    console.log(`[WEBHOOK] Message: POST http://localhost:${port}/message`);
-    console.log(`[WEBHOOK] Routes:  ${Object.keys(WEBHOOK_ROUTES).join(", ")}`);
   });
 }
 
-// ============================================================
-// WEBHOOK VALIDATION
-// ============================================================
-
-function validateWebhook(req: express.Request): boolean {
+function validateWebhookJson(req: express.Request): boolean {
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) return true; // No secret configured = allow all
+  if (!secret) return true;
 
-  const signature = req.headers["x-webhook-signature"] as string;
+  const signature = req.headers["x-webhook-signature"] as string | undefined;
   if (!signature) return false;
 
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(JSON.stringify(req.body))
-    .digest("hex");
+  const expected = crypto.createHmac("sha256", secret).update(JSON.stringify(req.body ?? {})).digest("hex");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expected)
-  );
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
 }
 
-// ============================================================
-// WEBHOOK PAYLOAD → MESSAGE
-// ============================================================
-
-function buildWebhookSummary(path: string, body: Record<string, any>): string {
-  // CI/CD webhook
+function buildLegacySummary(path: string, body: Record<string, any>): string {
   if (path === "/hooks/ci") {
     return `CI/CD Event: ${body.event || "unknown"} on ${body.repo || body.repository || "unknown"} — Status: ${body.status || "unknown"}. ${body.message || ""}`.trim();
   }
-
-  // PR webhook
   if (path === "/hooks/pr") {
     return `Pull Request ${body.action || "event"}: #${body.number || "?"} "${body.title || ""}" in ${body.repo || body.repository || "unknown"} by ${body.sender || body.author || "unknown"}`.trim();
   }
-
-  // Security alert
   if (path === "/hooks/security") {
     return `Security Alert [${body.severity || "unknown"}]: ${body.title || body.message || "Unknown alert"} in ${body.package || body.component || "unknown"}`.trim();
   }
-
-  // SAP deploy
   if (path.startsWith("/hooks/sap")) {
     return `SAP Event: ${body.event || body.status || "notification"} — Project: ${body.project || "unknown"}, Environment: ${body.environment || body.space || "unknown"}. ${body.message || ""}`.trim();
   }
-
-  // CAP build
   if (path === "/hooks/cap/build") {
     return `CAP Build: ${body.status || "unknown"} for service ${body.service || "unknown"}. ${body.message || ""}`.trim();
   }
-
-  // HANA alert
   if (path === "/hooks/hana/alert") {
     return `HANA Alert [${body.severity || "info"}]: ${body.message || "Unknown"} on instance ${body.instance || "unknown"}`.trim();
   }
 
-  // Generic fallback
   return `Webhook event on ${path}: ${JSON.stringify(body).substring(0, 500)}`;
 }

@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  cortex:
+    build: .
+    ports:
+      - "3120:3120"
+    env_file:
+      - .env
+    depends_on:
+      - supabase-db
+
+  # Minimal Supabase-compatible Postgres.
+  # For full Supabase API (auth/rest/storage), run `supabase start` locally
+  # or extend this compose with Kong/PostgREST/GoTrue/Storage.
+  supabase-db:
+    image: supabase/postgres:15.1.0.147
+    ports:
+      - "54322:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - supabase_db_data:/var/lib/postgresql/data
+
+volumes:
+  supabase_db_data:
